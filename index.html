@@ -1,0 +1,1214 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Star Map</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#050816;--surface:#0c0f1e;--panel:#101422;
+  --border:rgba(79,140,255,.12);--border-hi:rgba(79,140,255,.35);
+  --blue:#4F8CFF;--purple:#7C5CFF;--gold:#F5B942;
+  --green:#34d399;--red:#f87171;--cyan:#00e5ff;--pink:#ff3cac;
+  --t1:#eef2ff;--t2:#8899bb;--t3:#374166;
+  --r:10px;--r-sm:7px;
+  /* neon glow values */
+  --glow-blue:0 0 12px rgba(79,140,255,.5),0 0 28px rgba(79,140,255,.2);
+  --glow-purple:0 0 12px rgba(124,92,255,.5),0 0 28px rgba(124,92,255,.2);
+  --glow-cyan:0 0 10px rgba(0,229,255,.5),0 0 24px rgba(0,229,255,.2);
+  --glow-gold:0 0 10px rgba(245,185,66,.5),0 0 22px rgba(245,185,66,.2);
+  --glow-green:0 0 10px rgba(52,211,153,.45),0 0 22px rgba(52,211,153,.18);
+}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--t1);font-family:'Inter',sans-serif;font-size:13px;-webkit-font-smoothing:antialiased}
+
+/* neon scan line — very subtle top edge */
+html::after{content:'';position:fixed;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent 0%,var(--blue) 30%,var(--cyan) 50%,var(--purple) 70%,transparent 100%);opacity:.35;z-index:9999;pointer-events:none}
+
+#galaxy{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.65}
+body::before{content:'';position:fixed;inset:0;z-index:1;pointer-events:none;background:radial-gradient(ellipse 60% 50% at 80% 10%,rgba(79,140,255,.1) 0%,transparent 60%),radial-gradient(ellipse 50% 40% at 10% 85%,rgba(124,92,255,.08) 0%,transparent 60%),radial-gradient(ellipse 40% 30% at 50% 50%,rgba(0,229,255,.03) 0%,transparent 70%)}
+#root{display:grid;grid-template:'nav main ap' 1fr / 60px 1fr 288px;height:100vh;position:relative;z-index:2}
+
+/* NAV */
+#nav{grid-area:nav;background:rgba(5,8,22,.97);border-right:1px solid rgba(79,140,255,.15);box-shadow:2px 0 20px rgba(79,140,255,.06);display:flex;flex-direction:column;align-items:center;padding:14px 0;gap:3px;z-index:20}
+.nav-logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--blue),var(--purple));display:flex;align-items:center;justify-content:center;margin-bottom:14px;flex-shrink:0;box-shadow:var(--glow-blue);animation:logo-pulse 3s ease-in-out infinite}
+@keyframes logo-pulse{0%,100%{box-shadow:var(--glow-blue)}50%{box-shadow:0 0 20px rgba(79,140,255,.7),0 0 44px rgba(79,140,255,.3)}}
+.nav-logo svg{width:16px;height:16px;stroke:#fff;stroke-width:1.8}
+.nb{width:42px;height:42px;border-radius:9px;background:transparent;border:none;color:var(--t3);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .18s;position:relative;flex-shrink:0;user-select:none}
+.nb svg{width:17px;height:17px;stroke:currentColor;stroke-width:1.6}
+.nb:hover{background:rgba(79,140,255,.09);color:var(--t2)}
+.nb.on{background:rgba(79,140,255,.13);color:var(--blue);text-shadow:0 0 8px rgba(79,140,255,.8)}
+.nb.on svg{filter:drop-shadow(0 0 4px rgba(79,140,255,.8))}
+.nb.on::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);width:2px;height:18px;background:var(--blue);border-radius:0 2px 2px 0;box-shadow:0 0 8px var(--blue),0 0 16px rgba(79,140,255,.5)}
+.nav-sep{width:22px;height:1px;background:var(--border);margin:5px 0;flex-shrink:0}
+.nav-space{flex:1}
+.nav-clock{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t3);text-align:center;line-height:1.5;padding:0 4px}
+
+/* MAIN */
+#main{grid-area:main;overflow:hidden;position:relative}
+.view{display:none;height:100%;overflow-y:auto;padding:28px 30px;scrollbar-width:thin;scrollbar-color:var(--border) transparent;position:relative;z-index:1}
+.view.on{display:block}
+.view.cv{display:none;padding:0;overflow:hidden}
+.view.cv.on{display:block}
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.vh{margin-bottom:22px}
+.vh h1{font-size:19px;font-weight:600;color:var(--t1);letter-spacing:-.02em;margin-bottom:3px;text-shadow:0 0 20px rgba(79,140,255,.25)}
+.vh p{font-size:12px;color:var(--t3)}
+
+/* STAR MAP */
+#sm-canvas{display:block;position:absolute;inset:0;cursor:grab;z-index:1}
+#sm-canvas:active{cursor:grabbing}
+.sm-ui{position:absolute;pointer-events:none;z-index:5}
+.sm-ui.ia{pointer-events:all}
+#sm-hdr{top:22px;left:24px}
+#sm-hdr h1{font-size:17px;font-weight:600;color:var(--t1);margin-bottom:2px;text-shadow:0 0 20px rgba(79,140,255,.4)}
+#sm-hdr p{font-size:11px;color:var(--t3)}
+#sm-add-btn{top:22px;right:22px}
+#sm-add-btn button{background:rgba(79,140,255,.1);border:1px solid rgba(79,140,255,.3);color:var(--blue);padding:6px 14px;font-family:'Inter',sans-serif;font-size:11px;font-weight:500;cursor:pointer;border-radius:var(--r-sm);transition:all .18s;box-shadow:0 0 10px rgba(79,140,255,.2)}
+#sm-add-btn button:hover{background:rgba(79,140,255,.2);box-shadow:0 0 18px rgba(79,140,255,.45)}
+.sm-leg{bottom:22px;left:24px;display:flex;gap:14px;align-items:center}
+.sm-li{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--t3)}
+.sm-dot{width:7px;height:7px;border-radius:50%}
+
+/* DRAWER */
+#drawer{position:absolute;top:0;right:0;width:340px;height:100%;background:rgba(5,8,22,.97);border-left:1px solid rgba(79,140,255,.2);box-shadow:-4px 0 30px rgba(79,140,255,.08);transform:translateX(100%);transition:transform .3s cubic-bezier(.4,0,.2,1);z-index:30;overflow-y:auto;padding:22px 20px;backdrop-filter:blur(20px);scrollbar-width:thin;scrollbar-color:rgba(79,140,255,.15) transparent}
+#drawer.open{transform:translateX(0)}
+#d-close{position:absolute;top:14px;right:14px;width:26px;height:26px;border-radius:6px;background:rgba(255,255,255,.05);border:1px solid var(--border);color:var(--t2);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s}
+#d-close:hover{color:var(--t1);background:rgba(255,255,255,.1)}
+.d-pvis{display:flex;flex-direction:column;align-items:center;padding:16px 0 14px}
+.d-pname{font-size:15px;font-weight:600;color:var(--t1);margin-bottom:3px;text-align:center}
+.d-pdesc{font-size:11px;color:var(--t3);text-align:center;margin-bottom:10px}
+.d-pbadges{display:flex;gap:6px;justify-content:center}
+
+/* ASTRA PANEL */
+#ap{grid-area:ap;background:rgba(5,8,22,.97);border-left:1px solid rgba(79,140,255,.18);box-shadow:-2px 0 24px rgba(79,140,255,.07);display:flex;flex-direction:column;overflow:hidden;z-index:20}
+#ap-top{padding:16px 15px 12px;border-bottom:1px solid rgba(79,140,255,.12);flex-shrink:0}
+.ap-row{display:flex;align-items:center;gap:9px;margin-bottom:10px}
+.ap-orb{width:30px;height:30px;border-radius:50%;background:radial-gradient(circle at 38% 33%,rgba(79,140,255,.4),rgba(124,92,255,.2),transparent 70%);border:1px solid rgba(79,140,255,.5);display:flex;align-items:center;justify-content:center;box-shadow:var(--glow-blue);flex-shrink:0;animation:orb-p 3s ease-in-out infinite}
+@keyframes orb-p{0%,100%{box-shadow:var(--glow-blue)}50%{box-shadow:0 0 18px rgba(79,140,255,.7),0 0 40px rgba(79,140,255,.3),inset 0 0 8px rgba(79,140,255,.2)}}
+.ap-orb svg{width:12px;height:12px;stroke:var(--blue);stroke-width:1.8}
+.ap-name{font-size:13px;font-weight:600;color:var(--t1)}
+.ap-dot{width:6px;height:6px;border-radius:50%;background:var(--green);margin-left:auto;flex-shrink:0;animation:blink 4s ease-in-out infinite;box-shadow:var(--glow-green)}
+@keyframes blink{0%,100%{opacity:1;box-shadow:var(--glow-green)}50%{opacity:.3;box-shadow:none}}
+#ap-insight{font-size:12px;color:var(--t1);line-height:1.7;background:rgba(79,140,255,.06);border:1px solid rgba(79,140,255,.2);border-radius:var(--r-sm);padding:10px 12px;box-shadow:inset 0 0 20px rgba(79,140,255,.04)}
+#ap-qa{padding:10px 14px;border-bottom:1px solid var(--border);flex-shrink:0}
+.qa-lbl{font-size:9px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--t3);margin-bottom:6px}
+.qa-btn{width:100%;text-align:left;background:transparent;border:none;color:var(--t2);padding:5px 6px;font-family:'Inter',sans-serif;font-size:11px;cursor:pointer;transition:color .15s;border-radius:5px;display:flex;align-items:center;gap:6px}
+.qa-btn:hover{color:var(--t1);background:rgba(79,140,255,.06)}
+.qa-btn::before{content:'↗';font-size:9px;color:var(--blue);flex-shrink:0}
+#ap-chat{flex:1;overflow-y:auto;padding:10px 14px;display:flex;flex-direction:column;gap:6px;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.msg{font-size:11px;line-height:1.7;padding:9px 11px;border-radius:var(--r-sm)}
+.msg.ai{background:rgba(79,140,255,.06);border:1px solid rgba(79,140,255,.15);color:var(--t2)}
+.msg.usr{background:rgba(124,92,255,.1);border:1px solid rgba(124,92,255,.2);color:var(--t1);text-align:right;box-shadow:inset 0 0 20px rgba(124,92,255,.05)}
+.msg-from{font-size:8px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;margin-bottom:3px}
+.msg.ai .msg-from{color:var(--blue)}
+.msg.usr .msg-from{color:var(--purple)}
+.typing{display:inline-flex;gap:3px;align-items:center;padding:2px 0}
+.typing span{width:3px;height:3px;border-radius:50%;background:var(--blue);animation:ty .7s infinite}
+.typing span:nth-child(2){animation-delay:.15s}
+.typing span:nth-child(3){animation-delay:.3s}
+@keyframes ty{0%,100%{opacity:.2;transform:translateY(0)}50%{opacity:1;transform:translateY(-2px)}}
+#ap-input-row{padding:8px 10px;border-top:1px solid var(--border);display:flex;gap:5px;flex-shrink:0}
+.ap-input{flex:1;background:rgba(12,15,30,.8);border:1px solid var(--border);color:var(--t1);padding:7px 10px;font-family:'Inter',sans-serif;font-size:11px;border-radius:var(--r-sm);outline:none;resize:none;line-height:1.5;transition:border-color .15s}
+.ap-input:focus{border-color:rgba(79,140,255,.35)}
+.ap-input::placeholder{color:var(--t3)}
+.ap-send{background:var(--blue);border:none;color:#fff;padding:7px 11px;font-family:'Inter',sans-serif;font-size:11px;font-weight:600;cursor:pointer;border-radius:var(--r-sm);align-self:flex-end;transition:all .15s;box-shadow:0 0 10px rgba(79,140,255,.4)}
+.ap-send:hover{opacity:.9;box-shadow:0 0 18px rgba(79,140,255,.7),0 0 32px rgba(79,140,255,.3)}
+.ap-send:disabled{opacity:.3;cursor:wait}
+
+/* CARDS */
+.card{background:var(--surface);border:1px solid rgba(79,140,255,.1);border-radius:var(--r);padding:15px;transition:all .2s}
+.card-sm{padding:11px 13px}
+.card:hover{border-color:rgba(79,140,255,.3);box-shadow:0 0 20px rgba(79,140,255,.07),inset 0 0 30px rgba(79,140,255,.03)}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+
+/* SECTION LABEL */
+.sec-lbl{font-size:9px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--blue);margin-bottom:8px;display:flex;align-items:center;gap:8px;text-shadow:0 0 8px rgba(79,140,255,.4)}
+.sec-lbl::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,rgba(79,140,255,.3),transparent)}
+
+/* BADGE */
+.badge{display:inline-flex;align-items:center;font-size:9px;font-weight:500;padding:2px 6px;border-radius:4px;font-family:'JetBrains Mono',monospace}
+.bd{background:rgba(255,255,255,.05);color:var(--t3)}
+.bd-blue{background:rgba(79,140,255,.12);color:var(--blue);box-shadow:0 0 6px rgba(79,140,255,.25)}
+.bd-green{background:rgba(52,211,153,.12);color:var(--green);box-shadow:0 0 6px rgba(52,211,153,.2)}
+.bd-gold{background:rgba(245,185,66,.12);color:var(--gold);box-shadow:0 0 6px rgba(245,185,66,.2)}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:var(--r-sm);font-family:'Inter',sans-serif;font-size:11px;font-weight:500;cursor:pointer;border:1px solid rgba(79,140,255,.15);background:transparent;color:var(--t2);transition:all .15s;letter-spacing:.01em;user-select:none}
+.btn:hover{background:rgba(79,140,255,.08);color:var(--t1);border-color:rgba(79,140,255,.35)}
+.btn-pri{background:linear-gradient(135deg,var(--blue),#3a6fd8);color:#fff;border-color:transparent;box-shadow:0 0 12px rgba(79,140,255,.35)}
+.btn-pri:hover{box-shadow:0 0 20px rgba(79,140,255,.6),0 0 40px rgba(79,140,255,.25);color:#fff;border-color:transparent;opacity:1}
+.btn-ghost{border-color:transparent;color:var(--t3)}
+.btn-ghost:hover{background:rgba(79,140,255,.07);color:var(--t1);border-color:transparent}
+.btn-sm{padding:3px 9px;font-size:10px}
+.btn-icon{width:24px;height:24px;padding:0;justify-content:center;border-radius:5px}
+.btn svg{width:11px;height:11px;stroke:currentColor;stroke-width:1.8}
+
+/* INPUTS */
+.input{width:100%;background:rgba(12,15,30,.85);border:1px solid rgba(79,140,255,.12);color:var(--t1);padding:7px 10px;font-family:'Inter',sans-serif;font-size:12px;border-radius:var(--r-sm);outline:none;transition:all .15s}
+.input:focus{border-color:rgba(79,140,255,.5);background:rgba(79,140,255,.04);box-shadow:0 0 12px rgba(79,140,255,.15),inset 0 0 16px rgba(79,140,255,.04)}
+.input::placeholder{color:var(--t3)}
+textarea.input{resize:vertical;min-height:68px;line-height:1.6}
+select.input{appearance:none;cursor:pointer}
+.field{margin-bottom:9px}
+.fl{font-size:10px;color:var(--t3);margin-bottom:4px;display:block;font-weight:500}
+.g2f{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+
+/* PROGRESS */
+.pbar{height:2px;background:rgba(79,140,255,.08);border-radius:1px}
+.pfill{height:100%;border-radius:1px;background:linear-gradient(90deg,var(--blue),var(--cyan));box-shadow:0 0 6px rgba(79,140,255,.5);transition:width .5s ease}
+
+/* TABS */
+.tabs{display:flex;gap:2px;padding:3px;background:rgba(12,15,30,.9);border:1px solid rgba(79,140,255,.15);border-radius:8px;width:fit-content;margin-bottom:18px}
+.tab{padding:5px 13px;border-radius:6px;border:none;background:transparent;color:var(--t3);font-size:11px;font-weight:500;cursor:pointer;transition:all .15s;font-family:'Inter',sans-serif}
+.tab.on{background:rgba(79,140,255,.15);color:var(--t1);box-shadow:0 0 10px rgba(79,140,255,.25),inset 0 0 12px rgba(79,140,255,.08);text-shadow:0 0 8px rgba(79,140,255,.5)}
+
+/* TASKS */
+.task-item{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;background:var(--panel);border:1px solid rgba(79,140,255,.08);border-radius:var(--r-sm);transition:all .15s;margin-bottom:4px}
+.task-item:hover{border-color:rgba(79,140,255,.28);box-shadow:0 0 12px rgba(79,140,255,.06)}
+.tck{width:14px;height:14px;border-radius:3px;border:1.5px solid var(--t3);flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;font-size:8px;font-weight:700}
+.tck.done{background:var(--green);border-color:var(--green);color:#000;box-shadow:var(--glow-green)}
+.task-body{flex:1;min-width:0}
+.task-text{font-size:12px;color:var(--t1);font-weight:500;line-height:1.4;margin-bottom:3px}
+.task-text.done{text-decoration:line-through;color:var(--t3)}
+.task-meta{font-size:10px;color:var(--t3);display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.pri-hi{color:var(--red)}.pri-me{color:var(--gold)}.pri-lo{color:var(--t3)}
+
+/* NOTES */
+.note-card{padding:10px 12px;background:var(--panel);border:1px solid rgba(79,140,255,.08);border-radius:var(--r-sm);cursor:pointer;transition:all .15s;margin-bottom:5px}
+.note-card:hover{border-color:rgba(79,140,255,.3);box-shadow:0 0 14px rgba(79,140,255,.07)}
+.note-card.pinned{border-left:2px solid var(--blue);box-shadow:-2px 0 10px rgba(79,140,255,.2)}
+.nc-title{font-size:12px;font-weight:500;color:var(--t1);margin-bottom:3px}
+.nc-preview{font-size:11px;color:var(--t3);margin-bottom:5px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.nc-meta{display:flex;gap:5px;align-items:center;flex-wrap:wrap;font-size:10px;color:var(--t3)}
+.ntag{font-size:9px;padding:1px 5px;border-radius:3px;background:rgba(79,140,255,.07);color:var(--t3)}
+
+/* SOURCES */
+.source-item{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;background:var(--panel);border:1px solid rgba(79,140,255,.08);border-radius:var(--r-sm);margin-bottom:5px;cursor:pointer;transition:all .15s}
+.source-item:hover{border-color:rgba(79,140,255,.3);box-shadow:0 0 14px rgba(79,140,255,.07)}
+.s-icon{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;background:rgba(79,140,255,.07)}
+.s-body{flex:1;min-width:0}
+.s-title{font-size:12px;font-weight:500;color:var(--t1);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.s-insight{font-size:10px;color:var(--t3);line-height:1.5;margin-bottom:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.s-footer{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
+
+/* GOALS / HABITS */
+.goal-item{padding:11px 0;border-bottom:1px solid var(--border)}
+.goal-item:last-child{border-bottom:none}
+.goal-head{display:flex;justify-content:space-between;margin-bottom:4px}
+.goal-title{font-size:12px;font-weight:500;color:var(--t1)}
+.goal-pct{font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--t2)}
+.goal-sub{font-size:11px;color:var(--t3);margin-bottom:6px}
+.hrow{display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid var(--border)}
+.hrow:last-child{border-bottom:none}
+.hname{font-size:11px;color:var(--t2);width:130px;flex-shrink:0}
+.hdots{display:flex;gap:3px;flex-wrap:wrap}
+.hd{width:10px;height:10px;border-radius:2px;background:rgba(255,255,255,.04);border:1px solid var(--border)}
+.hd.on{background:rgba(79,140,255,.4);border-color:rgba(79,140,255,.5)}
+.hstreak{font-size:9px;color:var(--t3);font-family:'JetBrains Mono',monospace;margin-left:auto}
+
+/* REMINDERS */
+.rem-item{display:flex;align-items:center;gap:9px;padding:9px 10px;background:var(--panel);border:1px solid var(--border);border-radius:var(--r-sm);margin-bottom:4px}
+.r-icon{font-size:13px;flex-shrink:0}
+.r-text{font-size:12px;font-weight:500;color:var(--t1)}
+.r-meta{font-size:10px;color:var(--t3);margin-top:1px}
+.r-check{margin-left:auto;width:16px;height:16px;border-radius:50%;border:1.5px solid var(--t3);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;transition:all .15s}
+.r-check.done{background:var(--green);border-color:var(--green);color:#000;box-shadow:var(--glow-green)}
+
+/* FOCUS */
+#focus-overlay{display:none;position:fixed;inset:0;z-index:999;background:rgba(5,8,22,.97);backdrop-filter:blur(4px);flex-direction:column;align-items:center;justify-content:center}
+#focus-overlay.on{display:flex}
+#f-exit{position:absolute;top:18px;right:22px;background:none;border:1px solid rgba(79,140,255,.2);color:var(--t2);padding:5px 12px;font-size:11px;cursor:pointer;border-radius:6px;transition:all .15s}
+#f-exit:hover{color:var(--t1);border-color:var(--blue);box-shadow:0 0 10px rgba(79,140,255,.3)}
+.f-num{font-family:'JetBrains Mono',monospace;font-size:48px;font-weight:400;color:var(--t1);letter-spacing:-.03em;line-height:1;text-shadow:0 0 30px rgba(79,140,255,.4)}
+.f-phase{font-size:10px;color:var(--blue);letter-spacing:.1em;text-transform:uppercase;margin-top:5px;text-shadow:0 0 10px rgba(79,140,255,.5)}
+
+/* MODAL */
+.overlay{display:none;position:fixed;inset:0;z-index:800;background:rgba(0,0,0,.72);backdrop-filter:blur(6px);align-items:center;justify-content:center}
+.overlay.on{display:flex}
+.modal{background:var(--surface);border:1px solid rgba(79,140,255,.25);border-radius:13px;padding:20px 22px;width:430px;max-width:92vw;max-height:88vh;overflow-y:auto;position:relative;box-shadow:0 24px 70px rgba(0,0,0,.6),0 0 40px rgba(79,140,255,.08)}
+.modal::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--blue),var(--cyan),var(--purple),transparent);border-radius:13px 13px 0 0;opacity:.7}
+.modal-title{font-size:14px;font-weight:600;color:var(--t1);margin-bottom:15px;letter-spacing:-.01em}
+.mclose{position:absolute;top:13px;right:13px;background:none;border:none;color:var(--t3);font-size:15px;cursor:pointer;padding:2px 5px;border-radius:4px;transition:color .15s}
+.mclose:hover{color:var(--t1)}
+.m-actions{display:flex;gap:6px;margin-top:13px}
+
+/* TOAST */
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--surface);border:1px solid rgba(79,140,255,.35);border-radius:8px;padding:7px 15px;font-size:11px;color:var(--t1);z-index:900;display:none;box-shadow:0 8px 24px rgba(0,0,0,.4),0 0 20px rgba(79,140,255,.15);white-space:nowrap;animation:tin .18s ease}
+@keyframes tin{from{opacity:0;transform:translate(-50%,5px)}to{opacity:1;transform:translate(-50%,0)}}
+
+/* MISC */
+.empty{text-align:center;padding:28px 0;color:var(--t3);font-size:12px}
+.empty-icon{font-size:22px;margin-bottom:7px;opacity:.4}
+.mchart{display:flex;align-items:flex-end;gap:3px;height:34px}
+.mbar{flex:1;min-height:2px;border-radius:1px 1px 0 0;background:rgba(79,140,255,.18)}
+.mbar.cur{background:var(--blue)}
+.life-item{display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer}
+.life-item:last-child{border-bottom:none}
+.life-icon{font-size:14px;width:20px;text-align:center;flex-shrink:0}
+.life-name{font-size:11px;font-weight:500;color:var(--t1);flex:1}
+.life-score{font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--t3);width:28px;text-align:right}
+.j-entry{padding:11px 0;border-bottom:1px solid var(--border)}
+.j-entry:last-child{border-bottom:none}
+.j-date{font-size:9px;color:var(--t3);font-family:'JetBrains Mono',monospace;margin-bottom:3px}
+.j-mood{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--t3);margin-bottom:4px}
+.j-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.j-prev{font-size:12px;color:var(--t2);line-height:1.5}
+.j-lesson{font-size:11px;color:var(--blue);font-style:italic;margin-top:4px}
+.w-item{padding:10px 12px;background:var(--panel);border:1px solid var(--border);border-radius:var(--r-sm);margin-bottom:5px}
+.w-title{font-size:12px;font-weight:500;color:var(--t1);margin-bottom:2px}
+.w-meta{font-size:10px;color:var(--t3);font-family:'JetBrains Mono',monospace;margin-bottom:4px}
+.w-notes{font-size:11px;color:var(--t2);line-height:1.5}
+.setting-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border)}
+.setting-row:last-child{border-bottom:none}
+.s-label{font-size:12px;font-weight:500;color:var(--t1)}
+.s-sub{font-size:11px;color:var(--t3);margin-top:2px}
+.kanban{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+.kb-col{background:var(--panel);border:1px solid var(--border);border-radius:var(--r);padding:10px}
+.kb-col-h{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--t3);margin-bottom:7px;display:flex;align-items:center;justify-content:space-between}
+.kb-card{background:rgba(5,8,22,.7);border:1px solid var(--border);border-radius:5px;padding:7px 9px;margin-bottom:4px;cursor:pointer;transition:border-color .15s}
+.kb-card:hover{border-color:rgba(79,140,255,.2)}
+.kbc-title{font-size:11px;color:var(--t1);font-weight:500;margin-bottom:2px}
+.kbc-meta{font-size:9px;color:var(--t3)}
+
+@media(max-width:900px){#root{grid-template:'nav main' 1fr / 56px 1fr}#ap{display:none}#drawer{width:290px}}
+@media(max-width:580px){#root{grid-template:'main' 1fr / 1fr}#nav{display:none}.view{padding:18px 14px}.kanban{grid-template-columns:1fr}.g2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<canvas id="galaxy"></canvas>
+<div id="toast"></div>
+
+<!-- FOCUS OVERLAY -->
+<div id="focus-overlay">
+  <button id="f-exit" onclick="exitFocus()">✕ Keluar</button>
+  <div style="text-align:center">
+    <div style="position:relative;width:154px;height:154px;margin:0 auto 14px">
+      <svg width="154" height="154" viewBox="0 0 154 154" style="transform:rotate(-90deg)">
+        <circle cx="77" cy="77" r="64" fill="none" stroke="rgba(79,140,255,.1)" stroke-width="3"/>
+        <circle id="f-ring" cx="77" cy="77" r="64" fill="none" stroke="var(--blue)" stroke-width="3" stroke-linecap="round" stroke-dasharray="402" stroke-dashoffset="0" style="transition:stroke-dashoffset .5s linear"/>
+      </svg>
+      <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column">
+        <div class="f-num" id="f-display">25:00</div>
+        <div class="f-phase" id="f-phase">DEEP WORK</div>
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--t2);margin-bottom:16px;font-style:italic" id="f-task-lbl">—</div>
+    <div style="display:flex;gap:8px;justify-content:center">
+      <button class="btn btn-pri" id="f-start-btn" onclick="toggleTimer()">▶ Mulai</button>
+      <button class="btn" onclick="resetTimer()">↺ Reset</button>
+    </div>
+    <div style="font-size:10px;color:var(--t3);font-family:'JetBrains Mono',monospace;margin-top:14px">Sesi: <span id="f-sessions" style="color:var(--blue)">0</span> · <span id="f-total" style="color:var(--blue)">0</span> menit</div>
+  </div>
+</div>
+
+<!-- MODALS -->
+<div class="overlay" id="m-planet">
+  <div class="modal">
+    <div class="modal-title">Planet baru</div>
+    <button class="mclose" onclick="cm('m-planet')">✕</button>
+    <div class="field"><label class="fl">Nama</label><input class="input" id="p-name" placeholder="Nama project atau goal…"></div>
+    <div class="g2f">
+      <div class="field"><label class="fl">Tipe</label><select class="input" id="p-type"><option value="project">Project</option><option value="goal">Goal</option><option value="area">Life Area</option></select></div>
+      <div class="field"><label class="fl">Progress (%)</label><input class="input" type="number" id="p-pct" min="0" max="100" placeholder="0"></div>
+    </div>
+    <div class="field"><label class="fl">Deskripsi</label><input class="input" id="p-desc" placeholder="Apa yang ingin dicapai?"></div>
+    <div class="m-actions"><button class="btn btn-pri" onclick="addPlanet()">Buat Planet</button><button class="btn" onclick="cm('m-planet')">Batal</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="m-task">
+  <div class="modal">
+    <div class="modal-title">Tugas baru</div>
+    <button class="mclose" onclick="cm('m-task')">✕</button>
+    <div class="field"><label class="fl">Deskripsi</label><input class="input" id="t-desc" placeholder="Apa yang perlu dikerjakan?"></div>
+    <div class="g2f">
+      <div class="field"><label class="fl">Prioritas</label><select class="input" id="t-pri"><option value="hi">Tinggi</option><option value="me" selected>Sedang</option><option value="lo">Rendah</option></select></div>
+      <div class="field"><label class="fl">Estimasi</label><select class="input" id="t-est"><option>25 menit</option><option>1 jam</option><option>2 jam</option><option>Setengah hari</option></select></div>
+    </div>
+    <div class="m-actions"><button class="btn btn-pri" onclick="addTask()">Tambah</button><button class="btn" onclick="cm('m-task')">Batal</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="m-note">
+  <div class="modal">
+    <div class="modal-title">Catatan baru</div>
+    <button class="mclose" onclick="cm('m-note')">✕</button>
+    <div class="field"><label class="fl">Judul</label><input class="input" id="n-title" placeholder="Judul catatan…"></div>
+    <div class="field"><label class="fl">Isi</label><textarea class="input" id="n-body" rows="4" placeholder="Tulis pemikiranmu…"></textarea></div>
+    <div class="field"><label class="fl">Tags (pisah koma)</label><input class="input" id="n-tags" placeholder="ide, sistem…"></div>
+    <div class="m-actions"><button class="btn btn-pri" onclick="addNote()">Simpan</button><button class="btn" onclick="cm('m-note')">Batal</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="m-source">
+  <div class="modal">
+    <div class="modal-title">Tambah referensi</div>
+    <button class="mclose" onclick="cm('m-source')">✕</button>
+    <div class="field"><label class="fl">Judul</label><input class="input" id="s-title" placeholder="Judul buku / artikel / video…"></div>
+    <div class="g2f">
+      <div class="field"><label class="fl">Tipe</label><select class="input" id="s-type"><option>Artikel</option><option>Buku</option><option>Video</option><option>Podcast</option><option>Paper</option></select></div>
+      <div class="field"><label class="fl">Topik</label><input class="input" id="s-topic" placeholder="AI, Produktivitas…"></div>
+    </div>
+    <div class="field"><label class="fl">Key insight</label><textarea class="input" id="s-insight" rows="3" placeholder="Apa yang paling penting?"></textarea></div>
+    <div class="m-actions"><button class="btn btn-pri" onclick="addSource()">Simpan</button><button class="btn" onclick="cm('m-source')">Batal</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="m-journal">
+  <div class="modal">
+    <div class="modal-title">Refleksi harian</div>
+    <button class="mclose" onclick="cm('m-journal')">✕</button>
+    <div class="field"><label class="fl">Mood</label><select class="input" id="j-mood"><option value="focused">🧠 Focused</option><option value="calm">😌 Calm</option><option value="creative">⚡ Creative</option><option value="tired">😴 Tired</option><option value="off">😶 Off day</option></select></div>
+    <div class="field"><label class="fl">Apa yang terjadi</label><textarea class="input" id="j-day" rows="3" placeholder="Ceritakan harimu…"></textarea></div>
+    <div class="field"><label class="fl">Pelajaran</label><textarea class="input" id="j-lesson" rows="2" placeholder="Apa yang dipelajari?"></textarea></div>
+    <div class="m-actions"><button class="btn btn-pri" onclick="addJournal()">Simpan</button><button class="btn" onclick="cm('m-journal')">Batal</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="m-workout">
+  <div class="modal">
+    <div class="modal-title">Log latihan</div>
+    <button class="mclose" onclick="cm('m-workout')">✕</button>
+    <div class="field"><label class="fl">Split</label><select class="input" id="w-split"><option>Push — Dada, Bahu, Trisep</option><option>Pull — Punggung, Bisep</option><option>Legs</option><option>Upper Body</option><option>Full Body</option><option>Cardio</option></select></div>
+    <div class="field"><label class="fl">Catatan</label><textarea class="input" id="w-notes" rows="3" placeholder="Bench 80kg 3x8…"></textarea></div>
+    <div class="g2f">
+      <div class="field"><label class="fl">Durasi (menit)</label><input class="input" type="number" id="w-dur" placeholder="60"></div>
+      <div class="field"><label class="fl">Energi (1–10)</label><input class="input" type="number" id="w-energy" min="1" max="10" placeholder="8"></div>
+    </div>
+    <div class="m-actions"><button class="btn btn-pri" onclick="addWorkout()">Simpan</button><button class="btn" onclick="cm('m-workout')">Batal</button></div>
+  </div>
+</div>
+
+<!-- ROOT -->
+<div id="root">
+
+<!-- NAV RAIL -->
+<nav id="nav">
+  <div class="nav-logo">
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 2l3 6.5L22 9l-5 5 1.2 7L12 17.5 5.8 21 7 14 2 9l7-.5z" stroke-width="1.8"/></svg>
+  </div>
+  <button class="nb on" onclick="go('starmap',this)" title="Star Map">
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" stroke-width="1.6"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83" stroke-width="1.6"/></svg>
+  </button>
+  <button class="nb" onclick="go('knowledge',this)" title="Knowledge">
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 2l3 6.5L22 9l-5 5 1.2 7L12 17.5 5.8 21 7 14 2 9l7-.5z" stroke-width="1.6"/></svg>
+  </button>
+  <div class="nav-sep"></div>
+  <button class="nb" onclick="go('focus',this)" title="Focus">
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="1.6"/><circle cx="12" cy="12" r="4" stroke-width="1.6"/></svg>
+  </button>
+  <button class="nb" onclick="go('journal',this)" title="Jurnal">
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z" stroke-width="1.6"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z" stroke-width="1.6"/></svg>
+  </button>
+  <button class="nb" onclick="go('gym',this)" title="Gym">
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 4v16M18 4v16M6 12h12M4 6h4M16 6h4M4 18h4M16 18h4" stroke-width="1.6"/></svg>
+  </button>
+  <button class="nb" onclick="go('more',this)" title="Lainnya">
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg>
+  </button>
+  <div class="nav-space"></div>
+  <div class="nav-clock" id="nav-clock">00:00</div>
+</nav>
+
+<!-- MAIN -->
+<div id="main">
+
+  <!-- STAR MAP -->
+  <div class="view cv on" id="view-starmap">
+    <canvas id="sm-canvas"></canvas>
+    <div class="sm-ui" id="sm-hdr"><h1>Star Map</h1><p id="sm-hint">Klik planet untuk membuka detail</p></div>
+    <div class="sm-ui ia" id="sm-add-btn"><button onclick="om('m-planet')">+ Planet</button></div>
+    <div class="sm-ui sm-leg">
+      <div class="sm-li"><div class="sm-dot" style="background:#1e2a48"></div>Baru</div>
+      <div class="sm-li"><div class="sm-dot" style="background:rgba(79,140,255,.5)"></div>Berkembang</div>
+      <div class="sm-li"><div class="sm-dot" style="background:#4F8CFF"></div>Aktif</div>
+      <div class="sm-li"><div class="sm-dot" style="background:#F5B942"></div>Prima</div>
+    </div>
+    <div id="drawer">
+      <button id="d-close" onclick="closeDrawer()">✕</button>
+      <div id="d-body"></div>
+    </div>
+  </div>
+
+  <!-- KNOWLEDGE -->
+  <div class="view" id="view-knowledge">
+    <div class="vh"><h1>Knowledge</h1><p>Catatan, referensi, dan prompt</p></div>
+    <div style="position:relative;margin-bottom:14px">
+      <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:13px;height:13px;stroke:var(--t3);pointer-events:none" fill="none" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" stroke-width="1.6"/><path d="M21 21l-4.35-4.35" stroke-width="1.6"/></svg>
+      <input class="input" id="kb-q" placeholder="Cari…" style="padding-left:30px" oninput="renderKB()">
+    </div>
+    <div class="tabs">
+      <button class="tab on" onclick="switchKBTab('notes')" id="kbt-notes">Catatan</button>
+      <button class="tab" onclick="switchKBTab('vault')" id="kbt-vault">Referensi</button>
+      <button class="tab" onclick="switchKBTab('prompts')" id="kbt-prompts">Prompt</button>
+    </div>
+    <div id="kb-content"></div>
+  </div>
+
+  <!-- FOCUS -->
+  <div class="view" id="view-focus">
+    <div class="vh"><h1>Focus</h1><p>Pomodoro timer untuk deep work</p></div>
+    <div class="g2" style="max-width:560px">
+      <div class="card" style="text-align:center;padding:22px 14px">
+        <div style="position:relative;width:114px;height:114px;margin:0 auto 12px">
+          <svg width="114" height="114" viewBox="0 0 114 114" style="transform:rotate(-90deg)">
+            <circle cx="57" cy="57" r="48" fill="none" stroke="rgba(79,140,255,.1)" stroke-width="3"/>
+            <circle id="m-ring" cx="57" cy="57" r="48" fill="none" stroke="var(--blue)" stroke-width="3" stroke-linecap="round" stroke-dasharray="301" stroke-dashoffset="0" style="transition:stroke-dashoffset .5s linear"/>
+          </svg>
+          <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:26px;font-weight:400;color:var(--t1)" id="m-display">25:00</div>
+            <div style="font-size:8px;color:var(--t3);letter-spacing:.1em;margin-top:2px" id="m-phase">DEEP WORK</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:5px;justify-content:center;margin-bottom:8px">
+          <button class="btn btn-pri btn-sm" id="m-start-btn" onclick="toggleTimer()">▶ Mulai</button>
+          <button class="btn btn-sm" onclick="resetTimer()">↺</button>
+          <button class="btn btn-sm" onclick="enterFocus()">⊙</button>
+        </div>
+        <div style="font-size:10px;color:var(--t3);font-family:'JetBrains Mono',monospace">Sesi: <span id="m-sessions" style="color:var(--blue)">0</span></div>
+      </div>
+      <div class="card">
+        <div class="field"><label class="fl">Tugas sesi ini</label><input class="input" id="focus-task" placeholder="Apa yang dikerjakan?" onchange="document.getElementById('f-task-lbl').textContent=this.value||'—'"></div>
+        <div class="sec-lbl" style="margin-top:4px">Log sesi</div>
+        <div id="focus-log"><div class="empty" style="padding:10px 0">Belum ada sesi.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- JOURNAL -->
+  <div class="view" id="view-journal">
+    <div class="vh"><h1>Jurnal</h1><p>Refleksi harian</p></div>
+    <div style="display:flex;gap:8px;margin-bottom:14px;align-items:center">
+      <button class="btn btn-pri btn-sm" onclick="om('m-journal')">+ Refleksi</button>
+      <span style="font-size:11px;color:var(--t3);margin-left:auto" id="j-count"></span>
+    </div>
+    <div class="g2">
+      <div id="j-list"></div>
+      <div class="card card-sm">
+        <div class="fl" style="margin-bottom:7px">Niat hari ini</div>
+        <textarea class="input" id="morning-intent" rows="3" placeholder="Fokus utamamu hari ini…"></textarea>
+        <button class="btn btn-sm" style="margin-top:7px;width:100%" onclick="saveIntent()">Simpan niat</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- GYM -->
+  <div class="view" id="view-gym">
+    <div class="vh"><h1>Gym</h1><p>Log latihan fisik</p></div>
+    <div style="display:flex;gap:8px;margin-bottom:14px;align-items:center">
+      <button class="btn btn-pri btn-sm" onclick="om('m-workout')">+ Log latihan</button>
+      <span style="font-size:11px;color:var(--t3);margin-left:auto" id="gym-count"></span>
+    </div>
+    <div class="g2">
+      <div id="gym-list"></div>
+      <div>
+        <div class="card card-sm" style="margin-bottom:8px">
+          <div class="sec-lbl">Stats bulan ini</div>
+          <div style="display:flex;gap:16px">
+            <div><div style="font-size:22px;font-weight:600;color:var(--t1);font-family:'JetBrains Mono',monospace" id="gym-sessions">0</div><div style="font-size:10px;color:var(--t3)">Sesi</div></div>
+            <div><div style="font-size:22px;font-weight:600;color:var(--t1);font-family:'JetBrains Mono',monospace" id="gym-minutes">0</div><div style="font-size:10px;color:var(--t3)">Menit</div></div>
+          </div>
+        </div>
+        <div class="card card-sm"><div class="sec-lbl">Split frequency</div><div id="gym-splits"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MORE -->
+  <div class="view" id="view-more">
+    <div class="vh"><h1>Lainnya</h1><p>Life balance, identitas, analytics, settings</p></div>
+    <div class="tabs">
+      <button class="tab on" onclick="switchMoreTab('life')" id="mt-life">Life</button>
+      <button class="tab" onclick="switchMoreTab('identity')" id="mt-identity">Identity</button>
+      <button class="tab" onclick="switchMoreTab('analytics')" id="mt-analytics">Analytics</button>
+      <button class="tab" onclick="switchMoreTab('settings')" id="mt-settings">Settings</button>
+    </div>
+    <div id="more-body"></div>
+  </div>
+
+</div><!-- /main -->
+
+<!-- ASTRA PANEL -->
+<div id="ap">
+  <div id="ap-top">
+    <div class="ap-row">
+      <div class="ap-orb">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" stroke-width="1.8"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83" stroke-width="1.8"/></svg>
+      </div>
+      <div class="ap-name">Astra</div>
+      <div class="ap-dot"></div>
+    </div>
+    <div id="ap-insight">Membaca workspace…</div>
+  </div>
+  <div id="ap-qa">
+    <div class="qa-lbl">Saran cepat</div>
+    <button class="qa-btn" onclick="qa('Apa yang paling penting untuk aku kerjakan hari ini?')">Prioritas hari ini</button>
+    <button class="qa-btn" onclick="qa('Review semua planet aktif. Mana yang butuh perhatian?')">Review planet</button>
+    <button class="qa-btn" onclick="qa('Bantu breakdown tugas terbesar menjadi langkah 25 menit.')">Breakdown tugas</button>
+    <button class="qa-btn" onclick="qa('Aku butuh clarity. Apa yang paling penting bulan ini?')">Clarity</button>
+  </div>
+  <div id="ap-chat"></div>
+  <div id="ap-input-row">
+    <textarea class="ap-input" id="chat-input" rows="2" placeholder="Tanya Astra…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMsg()}"></textarea>
+    <button class="ap-send" id="ap-send-btn" onclick="sendMsg()">↑</button>
+  </div>
+</div>
+
+</div><!-- /root -->
+<script>
+// ═══════════════════════════════════════════════
+// 1. STORAGE — localStorage with autosave
+// ═══════════════════════════════════════════════
+const STORE_KEY='starmap_v1';
+const DEFAULT={planets:[],tasks:[],notes:[],sources:[],journals:[],workouts:[],prompts:[],lifeAreas:[{id:'la1',name:'Karir',icon:'💼',score:50,color:'#4F8CFF'},{id:'la2',name:'Kesehatan',icon:'🏋️',score:50,color:'#34d399'},{id:'la3',name:'Keuangan',icon:'📊',score:50,color:'#F5B942'},{id:'la4',name:'Relasi',icon:'🤝',score:50,color:'#a78bfa'},{id:'la5',name:'Mental',icon:'🧘',score:50,color:'#7C5CFF'},{id:'la6',name:'Learning',icon:'🧠',score:50,color:'#4F8CFF'}],settings:{name:'',focusDuration:25,breakDuration:5,morningIntent:'',coreValues:'',vision:'',principlesRaw:''},focus:{sessions:0,totalMin:0},version:1};
+
+function loadState(){
+  try{
+    const raw=localStorage.getItem(STORE_KEY);
+    if(!raw)return JSON.parse(JSON.stringify(DEFAULT));
+    const saved=JSON.parse(raw);
+    const base=JSON.parse(JSON.stringify(DEFAULT));
+    // Deep merge: top-level arrays from saved take priority, nested objects merged
+    return{
+      ...base,...saved,
+      settings:{...base.settings,...(saved.settings||{})},
+      focus:{...base.focus,...(saved.focus||{})},
+      // Ensure arrays always exist
+      planets:Array.isArray(saved.planets)?saved.planets:base.planets,
+      tasks:Array.isArray(saved.tasks)?saved.tasks:base.tasks,
+      notes:Array.isArray(saved.notes)?saved.notes:base.notes,
+      sources:Array.isArray(saved.sources)?saved.sources:base.sources,
+      journals:Array.isArray(saved.journals)?saved.journals:base.journals,
+      workouts:Array.isArray(saved.workouts)?saved.workouts:base.workouts,
+      prompts:Array.isArray(saved.prompts)?saved.prompts:base.prompts,
+      lifeAreas:Array.isArray(saved.lifeAreas)&&saved.lifeAreas.length?saved.lifeAreas:base.lifeAreas,
+    };
+  }catch(e){console.warn('[Store] Load failed',e);return JSON.parse(JSON.stringify(DEFAULT))}
+}
+
+let _saveT=null;
+function save(){clearTimeout(_saveT);_saveT=setTimeout(()=>{try{localStorage.setItem(STORE_KEY,JSON.stringify(S))}catch(e){console.warn('[Store]',e)}},400)}
+
+const S=loadState();
+
+// ═══════════════════════════════════════════════
+// 2. GALAXY BACKGROUND
+// ═══════════════════════════════════════════════
+(function(){
+  const c=document.getElementById('galaxy'),ctx=c.getContext('2d');
+  let stars=[];
+  function resize(){c.width=innerWidth;c.height=innerHeight}
+  function init(){stars=Array.from({length:100},()=>({x:Math.random()*c.width,y:Math.random()*c.height,r:Math.random()*.9+.1,speed:Math.random()*.055+.01,op:Math.random()*.3+.05,tw:Math.random()*Math.PI*2}))}
+  function draw(){ctx.clearRect(0,0,c.width,c.height);stars.forEach(s=>{s.tw+=.007;s.y+=s.speed;if(s.y>c.height){s.y=0;s.x=Math.random()*c.width}const op=s.op*(0.7+0.3*Math.sin(s.tw));ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fillStyle=`rgba(190,210,255,${op})`;ctx.fill()});requestAnimationFrame(draw)}
+  resize();init();draw();
+  window.addEventListener('resize',()=>{resize();init()});
+})();
+
+// ═══════════════════════════════════════════════
+// 3. STAR MAP ENGINE
+// ═══════════════════════════════════════════════
+const SM={
+  canvas:null,ctx:null,W:0,H:0,hover:null,
+  bgStars:[],anims:{},floatT:{},
+  offset:{x:0,y:0},
+  drag:{active:false,sx:0,sy:0,ox:0,oy:0},
+  _raf:null,_active:false,
+
+  init(){
+    this.canvas=document.getElementById('sm-canvas');
+    this.ctx=this.canvas.getContext('2d');
+    this.resize();this._buildBG();this._placePlanets();this._bindEvents();
+    this.start();
+  },
+
+  resize(){const w=document.getElementById('view-starmap');this.W=w.offsetWidth;this.H=w.offsetHeight;this.canvas.width=this.W;this.canvas.height=this.H},
+
+  _buildBG(){this.bgStars=Array.from({length:150},()=>({x:Math.random()*2400-200,y:Math.random()*1600-200,r:Math.random()*.7+.1,op:Math.random()*.22+.04,tw:Math.random()*Math.PI*2}))},
+
+  _placePlanets(){
+    const cx=this.W/2,cy=this.H/2;
+    const ring=[{x:-200,y:-100},{x:210,y:-90},{x:-80,y:160},{x:170,y:140},{x:-270,y:50},{x:270,y:60}];
+    S.planets.forEach((p,i)=>{
+      if(p.x==null){const pos=ring[i%ring.length];p.x=cx+pos.x+(Math.random()-.5)*40;p.y=cy+pos.y+(Math.random()-.5)*30}
+      this.anims[p.id]=this.anims[p.id]||0;
+      this.floatT[p.id]=this.floatT[p.id]||Math.random()*Math.PI*2;
+    });
+  },
+
+  _r(pct){return 12+(pct/100)*20},
+
+  _draw(p,hover){
+    const ctx=this.ctx,r=this._r(p.pct);
+    const ox=this.offset.x,oy=this.offset.y,t=Date.now()/1000;
+    this.floatT[p.id]=(this.floatT[p.id]||0)+.006;
+    const x=p.x+ox,y=p.y+oy+Math.sin(this.floatT[p.id])*2.5;
+    const sweep=(p.pct/100)*Math.PI*2,orbitR=r+13;
+
+    // orbit arc
+    ctx.beginPath();ctx.arc(x,y,orbitR,-Math.PI/2,-Math.PI/2+sweep);
+    ctx.strokeStyle=p.color;ctx.lineWidth=hover?1.5:1;
+    ctx.globalAlpha=.22+(p.pct/100)*.35;ctx.stroke();ctx.globalAlpha=1;
+
+    // orbit dot
+    if(p.pct>0){
+      this.anims[p.id]+=.0025;
+      const a=-Math.PI/2+sweep+this.anims[p.id];
+      ctx.beginPath();ctx.arc(x+Math.cos(a)*orbitR,y+Math.sin(a)*orbitR,2.2,0,Math.PI*2);
+      ctx.fillStyle=p.color;ctx.globalAlpha=.6+.35*Math.sin(t*2.2);ctx.fill();ctx.globalAlpha=1;
+    }
+
+    // halo
+    if(p.pct>40||hover){
+      const gr=ctx.createRadialGradient(x,y,0,x,y,r*2.6);
+      gr.addColorStop(0,p.color+'1a');gr.addColorStop(1,'transparent');
+      ctx.beginPath();ctx.arc(x,y,r*2.6,0,Math.PI*2);ctx.fillStyle=gr;ctx.fill();
+    }
+
+    // body
+    const bg=ctx.createRadialGradient(x-r*.28,y-r*.28,0,x,y,r);
+    if(p.pct>=75){bg.addColorStop(0,'#ffffffbb');bg.addColorStop(.3,p.color+'ee');bg.addColorStop(1,p.color+'44')}
+    else if(p.pct>=50){bg.addColorStop(0,p.color+'cc');bg.addColorStop(1,p.color+'33')}
+    else if(p.pct>=25){bg.addColorStop(0,p.color+'88');bg.addColorStop(1,p.color+'11')}
+    else{bg.addColorStop(0,'#2a3558');bg.addColorStop(1,'#111828')}
+    ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fillStyle=bg;ctx.fill();
+
+    // ring 75%+
+    if(p.pct>=75){ctx.beginPath();ctx.ellipse(x,y,r*1.65,r*.28,.12,0,Math.PI*2);ctx.strokeStyle=p.color+'55';ctx.lineWidth=2;ctx.stroke()}
+
+    // hover pulse
+    if(hover){ctx.beginPath();ctx.arc(x,y,r+4,0,Math.PI*2);ctx.strokeStyle=p.color;ctx.lineWidth=1.5;ctx.globalAlpha=.3+.35*Math.sin(t*3.5);ctx.stroke();ctx.globalAlpha=1}
+
+    // labels
+    ctx.textAlign='center';
+    ctx.font=`${hover?'500':'400'} 10px Inter, sans-serif`;
+    ctx.fillStyle=hover?'#eef2ff':'#8899bb';
+    ctx.fillText(p.name,x,y+r+17);
+    ctx.font='400 9px JetBrains Mono, monospace';
+    ctx.fillStyle=p.color+'aa';
+    ctx.fillText(p.pct+'%',x,y+r+27);
+  },
+
+  _loop(){
+    if(!this._active)return;
+    const ctx=this.ctx,ox=this.offset.x,oy=this.offset.y;
+    ctx.clearRect(0,0,this.W,this.H);
+    // bg parallax stars
+    this.bgStars.forEach(s=>{
+      s.tw+=.004;
+      const sx=((s.x+ox*.25)%(this.W+300)+this.W+300)%(this.W+300)-100;
+      const sy=((s.y+oy*.25)%(this.H+300)+this.H+300)%(this.H+300)-100;
+      const op=s.op*(0.7+0.3*Math.sin(s.tw));
+      ctx.beginPath();ctx.arc(sx,sy,s.r,0,Math.PI*2);ctx.fillStyle=`rgba(190,210,255,${op})`;ctx.fill();
+    });
+    // connection lines
+    if(S.planets.length>1){
+      for(let i=0;i<S.planets.length-1;i++){
+        const a=S.planets[i],b=S.planets[i+1];
+        ctx.beginPath();ctx.moveTo(a.x+ox,a.y+oy);ctx.lineTo(b.x+ox,b.y+oy);
+        ctx.strokeStyle='rgba(79,140,255,.06)';ctx.lineWidth=1;ctx.setLineDash([3,9]);ctx.stroke();ctx.setLineDash([]);
+      }
+    }
+    // planets
+    S.planets.forEach(p=>this._draw(p,this.hover===p.id));
+    // empty hint
+    if(S.planets.length===0){ctx.textAlign='center';ctx.font='400 13px Inter, sans-serif';ctx.fillStyle='rgba(136,153,187,.35)';ctx.fillText('Belum ada planet. Klik "+ Planet" untuk memulai.',this.W/2,this.H/2)}
+    this._raf=requestAnimationFrame(()=>this._loop());
+  },
+
+  start(){this._active=true;if(!this._raf)this._loop()},
+  stop(){this._active=false;if(this._raf){cancelAnimationFrame(this._raf);this._raf=null}},
+
+  _hit(mx,my){
+    const ox=this.offset.x,oy=this.offset.y;
+    for(const p of[...S.planets].reverse()){const r=this._r(p.pct)+10,dx=mx-(p.x+ox),dy=my-(p.y+oy);if(dx*dx+dy*dy<r*r)return p}
+    return null;
+  },
+
+  _bindEvents(){
+    const c=this.canvas;
+    let cc=null;
+    c.addEventListener('mousemove',e=>{
+      const rect=c.getBoundingClientRect(),mx=e.clientX-rect.left,my=e.clientY-rect.top;
+      if(this.drag.active){this.offset.x=this.drag.ox+(e.clientX-this.drag.sx);this.offset.y=this.drag.oy+(e.clientY-this.drag.sy);return}
+      const hit=this._hit(mx,my);this.hover=hit?hit.id:null;c.style.cursor=hit?'pointer':'grab';
+      const h=document.getElementById('sm-hint');if(h)h.textContent=hit?`${hit.name} — ${hit.pct}% · Klik untuk detail`:'Klik planet untuk membuka detail';
+    });
+    c.addEventListener('mousedown',e=>{
+      const rect=c.getBoundingClientRect();cc=this._hit(e.clientX-rect.left,e.clientY-rect.top);
+      if(!cc){this.drag.active=true;this.drag.sx=e.clientX;this.drag.sy=e.clientY;this.drag.ox=this.offset.x;this.drag.oy=this.offset.y}
+    });
+    c.addEventListener('mouseup',e=>{
+      if(!this.drag.active&&cc){const rect=c.getBoundingClientRect();const hit=this._hit(e.clientX-rect.left,e.clientY-rect.top);if(hit&&hit.id===cc.id)openDrawer(hit)}
+      this.drag.active=false;cc=null;
+    });
+    c.addEventListener('mouseleave',()=>{this.drag.active=false;this.hover=null;cc=null});
+    let ts=null;
+    c.addEventListener('touchstart',e=>{const t=e.touches[0];ts={x:t.clientX,y:t.clientY,ox:this.offset.x,oy:this.offset.y};this.drag.active=false},{passive:true});
+    c.addEventListener('touchmove',e=>{if(!ts)return;const t=e.touches[0],dx=t.clientX-ts.x,dy=t.clientY-ts.y;if(Math.hypot(dx,dy)>6){this.drag.active=true;this.offset.x=ts.ox+dx;this.offset.y=ts.oy+dy}},{passive:true});
+    c.addEventListener('touchend',e=>{if(!this.drag.active&&ts){const t=e.changedTouches[0],rect=c.getBoundingClientRect();const hit=this._hit(t.clientX-rect.left,t.clientY-rect.top);if(hit)openDrawer(hit)}this.drag.active=false;ts=null});
+    window.addEventListener('resize',()=>{if(document.getElementById('view-starmap').classList.contains('on'))this.resize()});
+  }
+};
+
+// ═══════════════════════════════════════════════
+// 4. PLANET DRAWER
+// ═══════════════════════════════════════════════
+function esc(s){return String(s).replace(/'/g,"\\'").replace(/"/g,'&quot;')}
+
+function openDrawer(planet){
+  const pid=esc(planet.id);
+  const pname=esc(planet.name);
+  const tasks=S.tasks.filter(t=>t.planetId===planet.id&&t.status!=='done');
+  const done=S.tasks.filter(t=>t.planetId===planet.id&&t.status==='done');
+  const pr=8+planet.pct/100*16;
+  document.getElementById('d-body').innerHTML=`
+    <div class="d-pvis">
+      <svg width="72" height="72" viewBox="0 0 72 72" style="margin-bottom:10px">
+        <circle cx="36" cy="36" r="${pr}" fill="${planet.color}${planet.pct>=75?'dd':planet.pct>=50?'aa':planet.pct>=25?'66':'33'}"/>
+        ${planet.pct>=75?`<ellipse cx="36" cy="36" rx="${10+planet.pct/100*12}" ry="3.5" stroke="${planet.color}55" stroke-width="1.8" fill="none" transform="rotate(-12 36 36)"/>`:''}
+        <circle cx="36" cy="36" r="${10+planet.pct/100*20}" fill="none" stroke="${planet.color}" stroke-width="1"
+          stroke-dasharray="${(10+planet.pct/100*20)*2*Math.PI*planet.pct/100} ${(10+planet.pct/100*20)*2*Math.PI}"
+          stroke-dashoffset="${-(10+planet.pct/100*20)*2*Math.PI*.25}" opacity=".3"/>
+      </svg>
+      <div class="d-pname">${planet.name}</div>
+      <div class="d-pdesc">${planet.desc||'—'}</div>
+      <div class="d-pbadges"><span class="badge bd-blue">${planet.pct}%</span><span class="badge bd">${planet.type}</span></div>
+    </div>
+    <div style="margin:12px 0 16px">
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--t3);margin-bottom:5px"><span>Progress</span><span id="d-pct" style="color:${planet.color}">${planet.pct}%</span></div>
+      <input type="range" min="0" max="100" value="${planet.pct}" style="width:100%;accent-color:${planet.color}" oninput="updatePlanet('${pid}','pct',+this.value);document.getElementById('d-pct').textContent=this.value+'%'">
+    </div>
+    <div class="sec-lbl">Tugas aktif (${tasks.length})</div>
+    <div id="d-tasks">${tasks.length?tasks.map(t=>dtHTML(t,planet)).join(''):'<div class="empty" style="padding:8px 0">Tidak ada tugas aktif.</div>'}</div>
+    <button class="btn btn-pri btn-sm" style="margin-top:8px;margin-bottom:16px" onclick="_activePlanet='${pid}';om('m-task')">+ Tugas</button>
+    ${done.length?`<div class="sec-lbl">Selesai (${done.length})</div><div>${done.map(t=>dtHTML(t,planet)).join('')}</div>`:''}
+    <div style="margin-top:16px;display:flex;gap:6px">
+      <button class="btn btn-ghost btn-sm" style="width:100%" onclick="qa('Analisa planet ${pname}: progress ${planet.pct}%, berikan insight dan prioritas minggu ini.')">🧠 Insight Astra</button>
+      <button class="btn btn-ghost btn-sm btn-icon" onclick="deletePlanet('${pid}')" style="flex-shrink:0" title="Hapus planet">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6" stroke-width="1.8"/><path d="M19 6l-1 14H6L5 6M10 11v6M14 11v6M9 6V4h6v2" stroke-width="1.8"/></svg>
+      </button>
+    </div>`;
+  document.getElementById('drawer').classList.add('open');
+}
+
+function dtHTML(t,planet){
+  const tid=esc(t.id),pid=esc(planet.id);
+  return`<div class="task-item"><div class="tck ${t.status==='done'?'done':''}" onclick="toggleTask('${tid}');refreshDrawer('${pid}')">${t.status==='done'?'✓':''}</div><div class="task-body"><div class="task-text ${t.status==='done'?'done':''}">${t.text}</div><div class="task-meta"><span class="${t.pri==='hi'?'pri-hi':t.pri==='me'?'pri-me':'pri-lo'}">${t.pri==='hi'?'Tinggi':t.pri==='me'?'Sedang':'Rendah'}</span><span>${t.est||''}</span></div></div><button class="btn btn-ghost btn-icon btn-sm" onclick="deleteTask('${tid}');refreshDrawer('${pid}')" style="opacity:.3;font-size:10px">✕</button></div>`;
+}
+
+// Refresh drawer after task changes without closing it
+function refreshDrawer(planetId){
+  const p=S.planets.find(p=>p.id===planetId);
+  if(p&&document.getElementById('drawer').classList.contains('open'))openDrawer(p);
+}
+
+function closeDrawer(){document.getElementById('drawer').classList.remove('open')}
+
+// ═══════════════════════════════════════════════
+// 5. NAVIGATION
+// ═══════════════════════════════════════════════
+function go(id,btn){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));
+  document.querySelectorAll('.nb').forEach(b=>b.classList.remove('on'));
+  const v=document.getElementById('view-'+id);if(v)v.classList.add('on');
+  if(btn)btn.classList.add('on');
+  // Start/stop Star Map RAF loop
+  if(id==='starmap'){SM.resize();SM.start()}else{SM.stop()}
+  if(id==='knowledge')renderKB();
+  if(id==='journal')renderJournal();
+  if(id==='gym')renderGym();
+  if(id==='more'){
+    // Sync tab visual state
+    _moreTab='life';
+    document.querySelectorAll('#view-more .tab').forEach(b=>b.classList.toggle('on',b.id==='mt-life'));
+    renderMoreTab('life');
+  }
+}
+
+function om(id){document.getElementById(id).classList.add('on')}
+function cm(id){document.getElementById(id).classList.remove('on')}
+
+// ═══════════════════════════════════════════════
+// 6. TOAST
+// ═══════════════════════════════════════════════
+let _tt=null;
+function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.style.display='block';clearTimeout(_tt);_tt=setTimeout(()=>el.style.display='none',2300)}
+
+// ═══════════════════════════════════════════════
+// 7. PLANET CRUD
+// ═══════════════════════════════════════════════
+const COLORS=['#4F8CFF','#7C5CFF','#F5B942','#34d399','#f87171','#a78bfa','#60d4f5'];
+
+function addPlanet(){
+  const name=document.getElementById('p-name').value.trim();
+  if(!name){toast('Nama planet wajib diisi.');return}
+  const planet={
+    id:'p'+Date.now(),name,
+    type:document.getElementById('p-type').value,
+    pct:Math.min(100,Math.max(0,parseInt(document.getElementById('p-pct').value)||0)),
+    desc:document.getElementById('p-desc').value.trim(),
+    color:COLORS[S.planets.length%COLORS.length],
+    x:null,y:null
+  };
+  S.planets.push(planet);
+  // Ensure SM has correct dimensions before placing
+  if(SM.W===0||SM.H===0)SM.resize();
+  SM._placePlanets();
+  save();
+  cm('m-planet');
+  ['p-name','p-pct','p-desc'].forEach(id=>document.getElementById(id).value='');
+  toast('Planet baru ditambahkan! 🌍');
+  updateInsight();
+}
+
+function updatePlanet(id,key,val){const p=S.planets.find(p=>p.id===id);if(p){p[key]=val;save();updateInsight()}}
+
+function deletePlanet(id){
+  if(!confirm('Hapus planet ini? Tugas terkait juga akan dihapus.'))return;
+  S.planets=S.planets.filter(p=>p.id!==id);
+  S.tasks=S.tasks.filter(t=>t.planetId!==id);
+  closeDrawer();save();updateInsight();toast('Planet dihapus.');
+}
+
+// ═══════════════════════════════════════════════
+// 8. TASK CRUD
+// ═══════════════════════════════════════════════
+let _activePlanet=null;
+
+function addTask(){
+  const text=document.getElementById('t-desc').value.trim();
+  if(!text){toast('Deskripsi wajib diisi.');return}
+  const newTask={id:'t'+Date.now(),text,planetId:_activePlanet||null,pri:document.getElementById('t-pri').value,est:document.getElementById('t-est').value,status:'todo'};
+  S.tasks.push(newTask);
+  cm('m-task');
+  document.getElementById('t-desc').value='';
+  save();
+  // Re-open drawer after modal closes (small delay for transition)
+  if(_activePlanet){
+    const p=S.planets.find(p=>p.id===_activePlanet);
+    if(p)setTimeout(()=>openDrawer(p),180);
+  }
+  toast('Tugas ditambahkan.');
+}
+
+function toggleTask(id){const t=S.tasks.find(t=>t.id===id);if(t){t.status=t.status==='done'?'todo':'done';save()}}
+function deleteTask(id){S.tasks=S.tasks.filter(t=>t.id!==id);save()}
+
+// ═══════════════════════════════════════════════
+// 9. NOTE CRUD
+// ═══════════════════════════════════════════════
+function addNote(){
+  const title=document.getElementById('n-title').value.trim();
+  if(!title){toast('Judul wajib diisi.');return}
+  S.notes.push({id:'n'+Date.now(),title,body:document.getElementById('n-body').value,tags:document.getElementById('n-tags').value.split(',').map(s=>s.trim()).filter(Boolean),pinned:false,date:new Date().toLocaleDateString('id-ID',{day:'numeric',month:'short'})});
+  cm('m-note');['n-title','n-body','n-tags'].forEach(id=>document.getElementById(id).value='');
+  save();renderKB();toast('Catatan disimpan.');
+}
+function deleteNote(id){S.notes=S.notes.filter(n=>n.id!==id);save();renderKB();toast('Catatan dihapus.')}
+
+// ═══════════════════════════════════════════════
+// 10. SOURCE CRUD
+// ═══════════════════════════════════════════════
+function addSource(){
+  const title=document.getElementById('s-title').value.trim();
+  if(!title){toast('Judul wajib diisi.');return}
+  S.sources.push({id:'s'+Date.now(),title,type:document.getElementById('s-type').value,topic:document.getElementById('s-topic').value.trim()||'Umum',insight:document.getElementById('s-insight').value.trim(),status:'Belum dibaca',date:new Date().toLocaleDateString('id-ID',{day:'numeric',month:'short'})});
+  cm('m-source');['s-title','s-topic','s-insight'].forEach(id=>document.getElementById(id).value='');
+  save();renderKB();toast('Referensi disimpan.');
+}
+function deleteSource(id){S.sources=S.sources.filter(s=>s.id!==id);save();renderKB();toast('Referensi dihapus.')}
+
+// ═══════════════════════════════════════════════
+// 11. KNOWLEDGE VIEW
+// ═══════════════════════════════════════════════
+let _kbTab='notes';
+function switchKBTab(tab){
+  _kbTab=tab;
+  document.querySelectorAll('#view-knowledge .tab').forEach(b=>b.classList.toggle('on',b.id==='kbt-'+tab));
+  renderKB();
+}
+
+function renderKB(){
+  const q=(document.getElementById('kb-q')?.value||'').toLowerCase();
+  const el=document.getElementById('kb-content');if(!el)return;
+  const icons={Buku:'📖',Artikel:'📄',Video:'🎬',Podcast:'🎧',Paper:'📋'};
+
+  if(_kbTab==='notes'){
+    const list=q?S.notes.filter(n=>n.title.toLowerCase().includes(q)||n.body?.toLowerCase().includes(q)):S.notes;
+    el.innerHTML=`<div style="display:flex;gap:8px;margin-bottom:12px;align-items:center"><button class="btn btn-pri btn-sm" onclick="om('m-note')">+ Catatan</button><span style="font-size:11px;color:var(--t3);margin-left:auto">${list.length} catatan</span></div>`+
+    (list.length?[...list].reverse().map(n=>`<div class="note-card ${n.pinned?'pinned':''}"><div style="display:flex;justify-content:space-between;margin-bottom:3px"><div class="nc-title">${n.title}</div><button class="btn btn-ghost btn-icon btn-sm" onclick="deleteNote('${n.id}')" style="opacity:.3;font-size:10px">✕</button></div>${n.body?`<div class="nc-preview">${n.body}</div>`:''}<div class="nc-meta"><span>${n.date||''}</span>${n.tags.map(t=>`<span class="ntag">${t}</span>`).join('')}</div></div>`).join(''):'<div class="empty"><div class="empty-icon">📝</div><div>Belum ada catatan. Mulai tambahkan!</div></div>');
+
+  }else if(_kbTab==='vault'){
+    const list=q?S.sources.filter(s=>s.title.toLowerCase().includes(q)):S.sources;
+    el.innerHTML=`<div style="display:flex;gap:8px;margin-bottom:12px;align-items:center"><button class="btn btn-pri btn-sm" onclick="om('m-source')">+ Referensi</button><span style="font-size:11px;color:var(--t3);margin-left:auto">${list.length} referensi</span></div>`+
+    (list.length?[...list].reverse().map(s=>`<div class="source-item"><div class="s-icon">${icons[s.type]||'📎'}</div><div class="s-body"><div class="s-title">${s.title}</div>${s.insight?`<div class="s-insight">${s.insight}</div>`:''}<div class="s-footer"><span class="badge bd">${s.type}</span><span class="badge bd">${s.topic}</span><span class="badge ${s.status==='Selesai'?'bd-green':'bd-blue'}">${s.status}</span><button class="btn btn-ghost btn-icon btn-sm" onclick="deleteSource('${s.id}')" style="opacity:.3;font-size:10px;margin-left:auto">✕</button></div></div></div>`).join(''):'<div class="empty"><div class="empty-icon">📚</div><div>Belum ada referensi.</div></div>');
+
+  }else if(_kbTab==='prompts'){
+    const prompts=S.prompts||[];
+    el.innerHTML=`<div style="margin-bottom:12px"><textarea class="input" id="prompt-txt" rows="3" placeholder="Tulis prompt…" style="margin-bottom:6px"></textarea><input class="input" id="prompt-lbl" placeholder="Label prompt…" style="margin-bottom:8px"><button class="btn btn-pri btn-sm" onclick="savePrompt()">Simpan prompt</button></div>`+
+    (prompts.length?prompts.map(p=>`<div class="note-card"><div style="display:flex;justify-content:space-between;margin-bottom:3px"><div class="nc-title">${p.label||'Prompt'}</div><div style="display:flex;gap:4px"><button class="btn btn-ghost btn-sm" onclick="copyPrompt('${p.id}')">Salin</button><button class="btn btn-ghost btn-icon btn-sm" onclick="deletePrompt('${p.id}')" style="opacity:.3;font-size:10px">✕</button></div></div><div class="nc-preview">${p.text}</div></div>`).join(''):'<div class="empty"><div class="empty-icon">✦</div><div>Belum ada prompt tersimpan.</div></div>');
+  }
+}
+
+function savePrompt(){
+  // Elements exist inside kb-content which is already rendered when prompts tab is active
+  const txtEl=document.getElementById('prompt-txt');
+  const lblEl=document.getElementById('prompt-lbl');
+  if(!txtEl){toast('Tab Prompt harus aktif.');return}
+  const text=txtEl.value.trim();
+  const label=lblEl?.value.trim()||'';
+  if(!text){toast('Isi prompt terlebih dahulu.');return}
+  if(!S.prompts)S.prompts=[];
+  S.prompts.push({id:'pr'+Date.now(),text,label});
+  save();renderKB();toast('Prompt disimpan.');
+}
+function deletePrompt(id){S.prompts=S.prompts.filter(p=>p.id!==id);save();renderKB()}
+function copyPrompt(id){const p=(S.prompts||[]).find(p=>p.id===id);if(p){navigator.clipboard?.writeText(p.text).catch(()=>{});toast('Prompt disalin!')}}
+
+// ═══════════════════════════════════════════════
+// 12. JOURNAL
+// ═══════════════════════════════════════════════
+const MOOD_C={focused:'#4F8CFF',calm:'#7C5CFF',creative:'#F5B942',tired:'#475569',off:'#475569'};
+const MOOD_L={focused:'Focused',calm:'Calm',creative:'Creative',tired:'Tired',off:'Off day'};
+
+function addJournal(){
+  const now=new Date();
+  const dateStr=now.toLocaleDateString('id-ID',{weekday:'short',day:'numeric',month:'short'})+
+    ', '+now.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',hour12:false});
+  S.journals.push({id:'j'+Date.now(),mood:document.getElementById('j-mood').value,day:document.getElementById('j-day').value.trim(),lesson:document.getElementById('j-lesson').value.trim(),date:dateStr});
+  cm('m-journal');['j-day','j-lesson'].forEach(id=>document.getElementById(id).value='');
+  save();renderJournal();toast('Refleksi disimpan.');
+}
+
+function renderJournal(){
+  const el=document.getElementById('j-list');if(!el)return;
+  const list=[...S.journals].reverse();
+  el.innerHTML=list.length?list.map(j=>`<div class="j-entry"><div class="j-date">${j.date||''}</div><div class="j-mood"><span class="j-dot" style="background:${MOOD_C[j.mood]||'#475569'}"></span>${MOOD_L[j.mood]||j.mood}</div>${j.day?`<div class="j-prev">${j.day}</div>`:''}${j.lesson?`<div class="j-lesson">"${j.lesson}"</div>`:''}</div>`).join(''):'<div class="empty"><div class="empty-icon">📓</div><div>Belum ada refleksi.</div></div>';
+  const jc=document.getElementById('j-count');if(jc)jc.textContent=S.journals.length+' entries';
+}
+
+function saveIntent(){
+  const v=document.getElementById('morning-intent')?.value.trim();
+  if(v){S.settings.morningIntent=v;save();toast('Niat pagi disimpan.')}
+}
+
+// ═══════════════════════════════════════════════
+// 13. GYM
+// ═══════════════════════════════════════════════
+function addWorkout(){
+  S.workouts.push({id:'w'+Date.now(),split:document.getElementById('w-split').value,notes:document.getElementById('w-notes').value.trim(),dur:parseInt(document.getElementById('w-dur').value)||60,energy:parseInt(document.getElementById('w-energy').value)||7,date:new Date().toLocaleDateString('id-ID',{weekday:'short',day:'numeric',month:'short'})});
+  cm('m-workout');['w-notes','w-dur','w-energy'].forEach(id=>document.getElementById(id).value='');
+  save();renderGym();toast('Latihan dicatat! 💪');
+}
+function deleteWorkout(id){S.workouts=S.workouts.filter(w=>w.id!==id);save();renderGym()}
+
+function renderGym(){
+  const el=document.getElementById('gym-list');if(!el)return;
+  el.innerHTML=[...S.workouts].reverse().map(w=>`<div class="w-item"><div class="w-title">${w.split}</div><div class="w-meta">${w.date} · ${w.dur} mnt · Energi ${w.energy}/10</div>${w.notes?`<div class="w-notes">${w.notes}</div>`:''}<button class="btn btn-ghost btn-sm" onclick="deleteWorkout('${w.id}')" style="margin-top:5px;opacity:.4">Hapus</button></div>`).join('')||'<div class="empty"><div class="empty-icon">🏋️</div><div>Belum ada log latihan.</div></div>';
+  const gs=document.getElementById('gym-sessions');const gm=document.getElementById('gym-minutes');const gc=document.getElementById('gym-count');
+  if(gs)gs.textContent=S.workouts.length;
+  if(gm)gm.textContent=S.workouts.reduce((a,w)=>a+w.dur,0);
+  if(gc)gc.textContent=S.workouts.length+' sesi';
+  const splits={};S.workouts.forEach(w=>{const k=w.split.split(' ')[0];splits[k]=(splits[k]||0)+1});
+  const sp=document.getElementById('gym-splits');
+  if(sp)sp.innerHTML=Object.entries(splits).map(([k,v])=>`<div style="display:flex;justify-content:space-between;margin-bottom:5px"><span style="font-size:11px;color:var(--t2)">${k}</span><span style="font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--green)">${v}x</span></div><div class="pbar" style="margin-bottom:6px"><div class="pfill" style="width:${Math.min(v/4*100,100)}%"></div></div>`).join('')||'<div style="font-size:11px;color:var(--t3)">Belum ada data.</div>';
+}
+
+// ═══════════════════════════════════════════════
+// 14. MORE TABS
+// ═══════════════════════════════════════════════
+let _moreTab='life';
+function switchMoreTab(tab){
+  _moreTab=tab;
+  document.querySelectorAll('#view-more .tab').forEach(b=>b.classList.toggle('on',b.id==='mt-'+tab));
+  renderMoreTab(tab);
+}
+
+function renderMoreTab(tab){
+  const el=document.getElementById('more-body');if(!el)return;
+  if(tab==='life'){
+    el.innerHTML=`<div class="card" style="max-width:520px">${S.lifeAreas.map(a=>`<div class="life-item"><div class="life-icon">${a.icon}</div><div class="life-name">${a.name}</div><input type="range" min="0" max="100" value="${a.score}" style="flex:1;accent-color:${a.color}" oninput="updateLA('${a.id}',+this.value)"><div class="life-score" style="color:${a.color}" id="la-${a.id}">${a.score}%</div></div>`).join('')}</div><div style="margin-top:10px;max-width:520px"><button class="btn btn-sm" onclick="qa('Weekly life review: analisa keseimbangan semua area dan beri saran konkret.')">🧠 Weekly Review</button></div>`;
+  }else if(tab==='identity'){
+    el.innerHTML=`<div class="g2" style="max-width:680px"><div><div class="sec-lbl">Core values</div><textarea class="input" rows="4" style="margin-bottom:8px" placeholder="Apa yang paling kamu pegang?" oninput="S.settings.coreValues=this.value;save()">${S.settings.coreValues||''}</textarea><div class="sec-lbl">Visi</div><textarea class="input" rows="4" placeholder="Siapa yang ingin kamu jadi?" oninput="S.settings.vision=this.value;save()">${S.settings.vision||''}</textarea></div><div><div class="sec-lbl">Prinsip hidup</div><textarea class="input" rows="9" placeholder="Satu prinsip per baris…" oninput="S.settings.principlesRaw=this.value;save()">${S.settings.principlesRaw||''}</textarea></div></div>`;
+  }else if(tab==='analytics'){
+    const fd=[0,0,0,0,0,0,TIMER.sessions||0];const mf=Math.max(...fd,1);
+    const days=['SEN','SEL','RAB','KAM','JUM','SAB','MIN'];
+    el.innerHTML=`<div class="g2" style="max-width:680px"><div class="card"><div class="sec-lbl">Focus sessions — 7 hari</div><div class="mchart">${fd.map((v,i)=>`<div class="mbar ${i===6?'cur':''}" style="height:${v/mf*34}px;opacity:${0.3+v/mf*.7}"></div>`).join('')}</div><div style="display:flex;justify-content:space-between;margin-top:4px;font-size:8px;color:var(--t3)">${days.map(d=>`<span>${d}</span>`).join('')}</div></div><div class="card"><div class="sec-lbl">Ringkasan</div>${[['Planets',S.planets.length],['Tasks aktif',S.tasks.filter(t=>t.status!=='done').length],['Catatan',S.notes.length],['Referensi',S.sources.length],['Focus sessions',TIMER.sessions||0],['Jurnal entries',S.journals.length]].map(([l,v])=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border)"><span style="font-size:11px;color:var(--t2)">${l}</span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t1)">${v}</span></div>`).join('')}</div></div>`;
+  }else if(tab==='settings'){
+    el.innerHTML=`<div class="card" style="max-width:480px"><div class="setting-row"><div><div class="s-label">Nama</div><div class="s-sub">Nama yang ditampilkan</div></div><input class="input" style="width:130px;text-align:right" value="${S.settings.name||''}" oninput="S.settings.name=this.value;save();updateInsight()"></div><div class="setting-row"><div><div class="s-label">Durasi fokus (menit)</div><div class="s-sub">Default: 25 menit</div></div><input class="input" type="number" style="width:70px;text-align:right" min="5" max="60" value="${S.settings.focusDuration||25}" onchange="S.settings.focusDuration=+this.value;save();if(!TIMER.running)resetTimer()"></div><div class="setting-row"><div><div class="s-label">Durasi istirahat (menit)</div><div class="s-sub">Default: 5 menit</div></div><input class="input" type="number" style="width:70px;text-align:right" min="1" max="30" value="${S.settings.breakDuration||5}" onchange="S.settings.breakDuration=+this.value;save()"></div><div class="setting-row"><div><div class="s-label">Export data</div><div class="s-sub">Unduh semua data sebagai JSON</div></div><button class="btn btn-sm" onclick="exportData()">Export</button></div><div class="setting-row" style="border-bottom:none"><div><div class="s-label">Reset semua data</div><div class="s-sub" style="color:var(--red)">Tidak bisa dibatalkan</div></div><button class="btn btn-sm" style="color:var(--red);border-color:rgba(248,113,113,.3)" onclick="resetAll()">Reset</button></div></div>`;
+  }
+}
+
+function updateLA(id,val){const a=S.lifeAreas.find(a=>a.id===id);if(a){a.score=val;save()}const el=document.getElementById('la-'+id);if(el)el.textContent=val+'%'}
+function resetAll(){if(!confirm('Hapus semua data?'))return;localStorage.removeItem(STORE_KEY);location.reload()}
+function exportData(){const blob=new Blob([JSON.stringify(S,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='starmap-export.json';a.click();URL.revokeObjectURL(url)}
+
+// ═══════════════════════════════════════════════
+// 15. FOCUS TIMER
+// ═══════════════════════════════════════════════
+const TIMER={
+  running:false,interval:null,seconds:25*60,phase:'work',sessions:0,totalMin:0,
+  get dur(){
+    try{return(this.phase==='work'?(S.settings.focusDuration||25):(S.settings.breakDuration||5))*60}
+    catch(e){return this.phase==='work'?1500:300}
+  }
+};
+
+function toggleTimer(){TIMER.running?pauseTimer():startTimer()}
+function startTimer(){
+  TIMER.running=true;
+  ['f-start-btn','m-start-btn'].forEach(id=>{const e=document.getElementById(id);if(e)e.textContent='⏸ Pause'});
+  TIMER.interval=setInterval(()=>{
+    TIMER.seconds--;
+    if(TIMER.seconds<=0){
+      clearInterval(TIMER.interval);TIMER.running=false;
+      if(TIMER.phase==='work'){
+        TIMER.sessions++;TIMER.totalMin+=(S.settings.focusDuration||25);
+        if(!S.focus)S.focus={sessions:0,totalMin:0};
+        S.focus.sessions=TIMER.sessions;S.focus.totalMin=TIMER.totalMin;
+        TIMER.phase='break';TIMER.seconds=(S.settings.breakDuration||5)*60;
+        logFocusSession();save();toast('Sesi selesai! Istirahat sebentar 🎉');
+      }else{TIMER.phase='work';TIMER.seconds=(S.settings.focusDuration||25)*60;toast('Istirahat selesai. Siap lagi?')}
+      ['f-start-btn','m-start-btn'].forEach(id=>{const e=document.getElementById(id);if(e)e.textContent='▶ Mulai'});
+    }
+    updateTimerUI();
+  },1000);
+}
+function pauseTimer(){clearInterval(TIMER.interval);TIMER.running=false;['f-start-btn','m-start-btn'].forEach(id=>{const e=document.getElementById(id);if(e)e.textContent='▶ Lanjut'})}
+function resetTimer(){clearInterval(TIMER.interval);TIMER.running=false;TIMER.phase='work';TIMER.seconds=(S.settings.focusDuration||25)*60;['f-start-btn','m-start-btn'].forEach(id=>{const e=document.getElementById(id);if(e)e.textContent='▶ Mulai'});updateTimerUI()}
+
+function updateTimerUI(){
+  const m=Math.floor(TIMER.seconds/60),s=TIMER.seconds%60;
+  const str=`${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  const ph=TIMER.phase==='work'?'DEEP WORK':'ISTIRAHAT';
+  const ratio=TIMER.seconds/TIMER.dur;
+  const rc=TIMER.phase==='work'?'var(--blue)':'var(--green)';
+  ['f-display','m-display'].forEach(id=>{const e=document.getElementById(id);if(e)e.textContent=str});
+  ['f-phase','m-phase'].forEach(id=>{const e=document.getElementById(id);if(e)e.textContent=ph});
+  ['f-sessions','m-sessions'].forEach(id=>{const e=document.getElementById(id);if(e)e.textContent=TIMER.sessions});
+  const ft=document.getElementById('f-total');if(ft)ft.textContent=TIMER.totalMin;
+  const fr=document.getElementById('f-ring');if(fr){fr.style.strokeDashoffset=402*(1-ratio);fr.style.stroke=rc}
+  const mr=document.getElementById('m-ring');if(mr){mr.style.strokeDashoffset=301*(1-ratio);mr.style.stroke=rc}
+}
+
+function logFocusSession(){
+  const task=document.getElementById('focus-task')?.value||'Deep work session';
+  const fl=document.getElementById('focus-log');if(!fl)return;
+  if(fl.querySelector('.empty'))fl.innerHTML='';
+  const d=document.createElement('div');d.className='note-card card-sm';
+  d.innerHTML=`<div class="nc-title">✓ ${task}</div><div class="nc-meta">${new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',hour12:false})} · Sesi #${TIMER.sessions}</div>`;
+  fl.insertBefore(d,fl.firstChild);
+}
+
+function enterFocus(){
+  document.getElementById('focus-overlay').classList.add('on');
+  const task=document.getElementById('focus-task')?.value||'—';
+  const tl=document.getElementById('f-task-lbl');if(tl)tl.textContent=task;
+}
+function exitFocus(){document.getElementById('focus-overlay').classList.remove('on')}
+
+// ═══════════════════════════════════════════════
+// 16. CLOCK
+// ═══════════════════════════════════════════════
+function updateClock(){const n=new Date();const el=document.getElementById('nav-clock');if(el)el.textContent=n.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',hour12:false})}
+updateClock();setInterval(updateClock,1000);
+
+// ═══════════════════════════════════════════════
+// 17. ASTRA
+//
+// API calls go to api.anthropic.com directly in
+// single-file demo mode. For production: proxy via
+// /api/astra on your server so the API key is never
+// exposed in client-side code.
+// ═══════════════════════════════════════════════
+let _chatH=[];
+
+function buildCtx(){
+  return[
+    `Nama: ${S.settings.name||'Pengguna'}`,
+    `Planets: ${S.planets.map(p=>`${p.name}(${p.pct}%)`).join(', ')||'—'}`,
+    `Tasks aktif: ${S.tasks.filter(t=>t.status!=='done').length}`,
+    `Catatan: ${S.notes.length} | Referensi: ${S.sources.length}`,
+    `Focus sessions hari ini: ${TIMER.sessions}`,
+  ].join('\n');
+}
+
+function updateInsight(){
+  const el=document.getElementById('ap-insight');if(!el)return;
+  if(S.planets.length===0){el.textContent=`Selamat datang${S.settings.name?', '+S.settings.name:''}. Buat planet pertamamu untuk memulai.`;return}
+  const top=[...S.planets].sort((a,b)=>{const sa=a.pct>=75?a.pct-50:a.pct;const sb=b.pct>=75?b.pct-50:b.pct;return sb-sa})[0];
+  const active=S.tasks.filter(t=>t.status!=='done').length;
+  el.innerHTML=top?`<strong>${top.name}</strong> — ${top.pct}%${top.pct>=75?' · hampir selesai 🌟':top.pct>=50?' · on track':' · perlu perhatian'}. ${active} tugas menunggu.`:'Workspace siap.';
+}
+
+function addChatMsg(role,html){
+  const el=document.getElementById('ap-chat');
+  const div=document.createElement('div');div.className=`msg ${role==='user'?'usr':'ai'}`;
+  div.innerHTML=`<div class="msg-from">${role==='user'?(S.settings.name||'Kamu'):'Astra'}</div>${html}`;
+  el.appendChild(div);el.scrollTop=el.scrollHeight;return div;
+}
+
+async function sendMsg(){
+  const inp=document.getElementById('chat-input'),btn=document.getElementById('ap-send-btn');
+  const msg=inp.value.trim();if(!msg)return;
+  inp.value='';btn.disabled=true;
+  addChatMsg('user',msg);
+  const td=addChatMsg('ai','<div class="typing"><span></span><span></span><span></span></div>');
+  _chatH.push({role:'user',content:msg});
+  if(_chatH.length>20)_chatH=_chatH.slice(-20);
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',max_tokens:700,
+        system:`Kamu adalah Astra — AI co-pilot personal dalam Star Map Workspace.\n\nKonteks:\n${buildCtx()}\n\nCara merespons:\n- Bahasa Indonesia yang tenang dan tajam\n- Langsung ke inti, tanpa basa-basi\n- Insight konkret dan actionable\n- Maks 4 paragraf`,
+        messages:_chatH,
+      }),
+    });
+    if(!res.ok)throw new Error(`HTTP ${res.status}`);
+    const data=await res.json();
+    const reply=data.content?.[0]?.text||'Tidak ada respons.';
+    _chatH.push({role:'assistant',content:reply});
+    td.innerHTML=`<div class="msg-from">Astra</div>${reply.replace(/\n/g,'<br>').replace(/\*\*(.*?)\*\*/g,'<strong style="color:var(--t1)">$1</strong>')}`;
+  }catch(e){
+    console.error('[Astra]',e);
+    td.innerHTML=`<div class="msg-from">Astra</div><span style="color:var(--t3)">Koneksi gagal. Pastikan API tersedia.</span>`;
+  }
+  btn.disabled=false;
+  document.getElementById('ap-chat').scrollTop=99999;
+}
+
+function qa(q){document.getElementById('chat-input').value=q;sendMsg()}
+
+// ═══════════════════════════════════════════════
+// 18. INIT
+// ═══════════════════════════════════════════════
+window.addEventListener('load',()=>{
+  SM.init();
+  updateTimerUI();
+  updateInsight();
+  // Restore morning intent
+  const mi=document.getElementById('morning-intent');
+  if(mi&&S.settings.morningIntent)mi.value=S.settings.morningIntent;
+  // Greet
+  const el=document.getElementById('ap-chat');
+  if(el){
+    const div=document.createElement('div');div.className='msg ai';
+    const n=S.settings.name||'Pengguna';
+    const pc=S.planets.length;
+    div.innerHTML=`<div class="msg-from">Astra</div>${pc===0?`Halo ${n}. Workspace kosong — buat planet pertamamu di Star Map.`:`Halo ${n}. ${pc} planet terpantau. Apa yang ingin kita kerjakan?`}`;
+    el.appendChild(div);
+  }
+});
+
+window.addEventListener('resize',()=>{
+  if(document.getElementById('view-starmap')?.classList.contains('on'))SM.resize();
+});
+</script>
+</body>
+</html>
